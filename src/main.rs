@@ -9,6 +9,79 @@ use macroquad::{
 };
 use std::f32::consts::PI;
 
+const WIDTH: f32 = 800.0;
+const HEIGHT: f32 = 600.0;
+const DEBUG_NEIGHBORS: bool = false;
+
+struct Partition {
+    // 2d grid of particle indices and positions contained within the given square cell with side `size`
+    grid: Vec<Vec<Vec<(usize, Vec2)>>>,
+
+    size: f32,
+    x_dim: usize,
+    y_dim: usize,
+}
+
+impl Partition {
+    pub fn new(width: f32, height: f32, size: f32) -> Self {
+        let x_dim = (width / size).ceil() as usize;
+        let y_dim = (height / size).ceil() as usize;
+        let grid = vec![vec![vec![]; y_dim]; x_dim];
+
+        Self {
+            grid,
+            size,
+            x_dim,
+            y_dim,
+        }
+    }
+
+    pub fn add(&mut self, p: (usize, Vec2)) {
+        let cell = self.find_cell(p.1);
+        self.grid[cell.0][cell.1].push(p);
+    }
+
+    fn find_cell(&self, pos: Vec2) -> (usize, usize) {
+        let cell_x = (pos.x / self.size)
+            .round()
+            .clamp(0.0, self.x_dim as f32 - 1.0) as usize;
+        let cell_y = (pos.y / self.size)
+            .round()
+            .clamp(0.0, self.y_dim as f32 - 1.0) as usize;
+
+        (cell_x, cell_y)
+    }
+
+    fn find_neighbors(&self, index: usize, pos: Vec2) -> Vec<usize> {
+        let cell = self.find_cell(pos);
+        let mut neighbors = vec![];
+
+        for dx in -1..=1 {
+            for dy in -1..=1 {
+                let cell_x = cell.0 as isize + dx;
+                let cell_y = cell.1 as isize + dy;
+
+                if cell_x < 0
+                    || cell_x >= self.x_dim as isize
+                    || cell_y < 0
+                    || cell_y >= self.y_dim as isize
+                {
+                    continue;
+                }
+
+                let cell = &self.grid[cell_x as usize][cell_y as usize];
+                neighbors.extend(cell.iter().filter_map(|(p_index, p_pos)| {
+                    let dist_squared = (pos - p_pos).length_squared();
+                    let keep = index != *p_index && dist_squared <= self.size.powi(2);
+                    keep.then_some(p_index)
+                }));
+            }
+        }
+
+        neighbors
+    }
+}
+
 #[derive(Clone)]
 struct Particle {
     pos: Vec2,
@@ -33,7 +106,7 @@ fn particles(count_per_dim: usize) -> Vec<Particle> {
     let mut particles = vec![];
 
     let sep = 10.0;
-    let offset = (vec2(800.0, 600.0) - count_per_dim as f32 * vec2(sep, sep)) / 2.0;
+    let offset = (vec2(WIDTH, HEIGHT) - count_per_dim as f32 * vec2(sep, sep)) / 2.0;
     for i in 0..count_per_dim {
         for j in 0..count_per_dim {
             particles.push(Particle {
@@ -94,27 +167,38 @@ impl World {
             pos.push(p.pos + p.vel * dt);
         }
 
-        // TODO: optimize with space partitioning
-        //       use cutoff-sized grid and only check the nearest neighbor cells
+        let mut partition = Partition::new(WIDTH, HEIGHT, self.h);
+        for p in pos.iter().copied().enumerate() {
+            partition.add(p);
+        }
+
         let neighbors: Vec<Vec<usize>> = self
             .particles
             .iter()
             .enumerate()
             .map(|(i, _)| {
-                self.particles
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(j, _)| {
-                        let dist_squared = (pos[i] - pos[j]).length_squared();
-                        let keep = i != j && dist_squared <= self.h.powi(2);
-                        keep.then_some(j)
-                    })
-                    .collect()
+                let neighbors = partition.find_neighbors(i, pos[i]);
+
+                if DEBUG_NEIGHBORS {
+                    let slow_neighbors: Vec<_> = self
+                        .particles
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(j, _)| {
+                            let dist_squared = (pos[i] - pos[j]).length_squared();
+                            let keep = i != j && dist_squared <= self.h.powi(2);
+                            keep.then_some(j)
+                        })
+                        .collect();
+
+                    assert_eq!(neighbors.len(), slow_neighbors.len());
+                }
+
+                neighbors
             })
             .collect();
 
-        let max_count = neighbors.iter().map(|n| n.len()).max().unwrap();
-        println!("Max neighbor count: {max_count}");
+        let _max_neighbor_count = neighbors.iter().map(|n| n.len()).max().unwrap();
 
         for _iter in 0..self.solver_iterations {
             let lambda: Vec<_> = neighbors
@@ -162,8 +246,8 @@ impl World {
 
                 // TODO: proper collision detection
 
-                pos.x = pos.x.clamp(0.0, 800.0);
-                pos.y = pos.y.clamp(0.0, 600.0);
+                pos.x = pos.x.clamp(0.0, WIDTH);
+                pos.y = pos.y.clamp(0.0, HEIGHT);
             }
         }
 
