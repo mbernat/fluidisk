@@ -1,3 +1,4 @@
+use egui::Slider;
 use glam::{Vec2, vec2};
 use macroquad::{
     color::{BLACK, WHITE},
@@ -19,15 +20,46 @@ struct World {
     gravity: Vec2,
     // desired fluid density
     rho: f32,
+    // TODO: compute from density?
     // kernel cutoff distance
     h: f32,
     // constraint force mixing
     cfm: f32,
-
     solver_iterations: usize,
+    particle_count_per_dim: usize,
+}
+
+fn particles(count_per_dim: usize) -> Vec<Particle> {
+    let mut particles = vec![];
+
+    let sep = 10.0;
+    let offset = (vec2(800.0, 600.0) - count_per_dim as f32 * vec2(sep, sep)) / 2.0;
+    for i in 0..count_per_dim {
+        for j in 0..count_per_dim {
+            particles.push(Particle {
+                pos: vec2(i as f32 * sep, j as f32 * sep) + offset,
+                vel: Vec2::ZERO,
+            })
+        }
+    }
+
+    particles
 }
 
 impl World {
+    fn new() -> Self {
+        let particle_count_per_dim = 40;
+        World {
+            particles: particles(particle_count_per_dim),
+            gravity: vec2(0.0, 500.0),
+            rho: 1e-2,
+            h: 20.0,
+            cfm: 2e-1,
+            solver_iterations: 4,
+            particle_count_per_dim,
+        }
+    }
+
     fn step(&mut self, dt: f32) {
         let mut pos = vec![];
         for p in &mut self.particles {
@@ -62,6 +94,8 @@ impl World {
             pos.push(p.pos + p.vel * dt);
         }
 
+        // TODO: optimize with space partitioning
+        //       use cutoff-sized grid and only check the nearest neighbor cells
         let neighbors: Vec<Vec<usize>> = self
             .particles
             .iter()
@@ -142,7 +176,7 @@ impl World {
         }
     }
 
-    // TODO: 2d kernels or normalization; poly6 and spiky are normalized for 3d, so we multiply by `h` to correct for that
+    // TODO: 2d kernels or normalization; poly6 and spiky are normalized for 3d, so we multiply by `h` to somewhat correct for that
 
     fn kernel(x: Vec2, h: f32) -> f32 {
         h * poly6(x.length_squared(), h)
@@ -185,36 +219,47 @@ fn spiky_diff(r: f32, h: f32) -> f32 {
     }
 }
 
+fn input(world: &mut World) {
+    egui_macroquad::ui(|egui_ctx| {
+        egui::Window::new("controls").show(egui_ctx, |ui| {
+            ui.label("Density");
+            ui.add(Slider::new(&mut world.rho, 1e-3..=1e-1));
+
+            ui.label("Kernel cutoff distance");
+            ui.add(Slider::new(&mut world.h, 5.0..=100.0));
+
+            ui.label("Constraint force mixing");
+            ui.add(Slider::new(&mut world.cfm, 0.0..=1.0));
+
+            ui.label("Solver iterations");
+            ui.add(Slider::new(&mut world.solver_iterations, 1..=20));
+
+            ui.label("Particle count per dim");
+            ui.add(Slider::new(&mut world.particle_count_per_dim, 1..=100));
+
+            ui.separator();
+
+            if ui.button("Restart").clicked() {
+                world.particles = particles(world.particle_count_per_dim);
+            }
+        });
+    });
+}
+
 #[macroquad::main("Fluidisk")]
 async fn main() {
-    let mut world = World {
-        particles: vec![],
-        gravity: vec2(0.0, 500.0),
-        rho: 1e-2,
-        h: 20.0,
-        cfm: 2e-1,
-
-        solver_iterations: 4,
-    };
-
-    let count = 40;
-    let sep = 10.0;
-    let offset = (vec2(800.0, 600.0) - count as f32 * vec2(sep, sep)) / 2.0;
-    for i in 0..count {
-        for j in 0..count {
-            world.particles.push(Particle {
-                pos: vec2(i as f32 * sep, j as f32 * sep) + offset,
-                vel: Vec2::ZERO,
-            })
-        }
-    }
+    let mut world = World::new();
 
     loop {
         clear_background(BLACK);
 
+        input(&mut world);
+
         let dt = get_frame_time();
         world.step(dt);
         world.draw();
+
+        egui_macroquad::draw();
 
         next_frame().await
     }
