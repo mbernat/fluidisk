@@ -1,9 +1,9 @@
 use egui::Slider;
 use glam::{Vec2, vec2};
 use macroquad::{
-    color::{BLACK, WHITE},
+    color::{BLACK, BLUE, WHITE},
     input::{KeyCode, is_key_down},
-    shapes::draw_circle,
+    shapes::{draw_circle, draw_circle_lines},
     time::get_frame_time,
     window::{clear_background, next_frame},
 };
@@ -100,6 +100,8 @@ struct World {
     cfm: f32,
     solver_iterations: usize,
     particle_count_per_dim: usize,
+
+    draw_kernel_cutoff: bool,
 }
 
 fn particles(count_per_dim: usize) -> Vec<Particle> {
@@ -121,15 +123,16 @@ fn particles(count_per_dim: usize) -> Vec<Particle> {
 
 impl World {
     fn new() -> Self {
-        let particle_count_per_dim = 40;
+        let particle_count_per_dim = 50;
         World {
             particles: particles(particle_count_per_dim),
             gravity: vec2(0.0, 500.0),
-            rho: 1e-2,
+            rho: 2e-2,
             h: 20.0,
             cfm: 2e-1,
             solver_iterations: 4,
             particle_count_per_dim,
+            draw_kernel_cutoff: false,
         }
     }
 
@@ -271,10 +274,41 @@ impl World {
         h * spiky_diff(r, h) * norm
     }
 
+    fn input(&mut self) {
+        egui_macroquad::ui(|egui_ctx| {
+            egui::Window::new("controls").show(egui_ctx, |ui| {
+                ui.label("Density");
+                ui.add(Slider::new(&mut self.rho, 1e-3..=1e-1));
+
+                ui.label("Kernel cutoff distance");
+                ui.add(Slider::new(&mut self.h, 5.0..=100.0));
+
+                ui.label("Constraint force mixing");
+                ui.add(Slider::new(&mut self.cfm, 0.0..=1.0));
+
+                ui.label("Solver iterations");
+                ui.add(Slider::new(&mut self.solver_iterations, 1..=20));
+
+                ui.label("Particle count per dim");
+                ui.add(Slider::new(&mut self.particle_count_per_dim, 1..=100));
+
+                ui.separator();
+
+                ui.checkbox(&mut self.draw_kernel_cutoff, "Draw kernel cutoff?");
+
+                if ui.button("Restart").clicked() {
+                    self.particles = particles(self.particle_count_per_dim);
+                }
+            });
+        });
+    }
     fn draw(&self) {
         for p in &self.particles {
-            draw_circle(p.pos.x, p.pos.y, 2.0, WHITE);
-            // draw_circle_lines(p.pos.x, p.pos.y, self.h, 1.0, GREEN);
+            draw_circle(p.pos.x, p.pos.y, 2.0, BLUE.with_alpha(0.5));
+
+            if self.draw_kernel_cutoff {
+                draw_circle_lines(p.pos.x, p.pos.y, self.h, 1.0, WHITE.with_alpha(0.1));
+            }
         }
     }
 }
@@ -303,46 +337,17 @@ fn spiky_diff(r: f32, h: f32) -> f32 {
     }
 }
 
-fn input(world: &mut World) {
-    egui_macroquad::ui(|egui_ctx| {
-        egui::Window::new("controls").show(egui_ctx, |ui| {
-            ui.label("Density");
-            ui.add(Slider::new(&mut world.rho, 1e-3..=1e-1));
-
-            ui.label("Kernel cutoff distance");
-            ui.add(Slider::new(&mut world.h, 5.0..=100.0));
-
-            ui.label("Constraint force mixing");
-            ui.add(Slider::new(&mut world.cfm, 0.0..=1.0));
-
-            ui.label("Solver iterations");
-            ui.add(Slider::new(&mut world.solver_iterations, 1..=20));
-
-            ui.label("Particle count per dim");
-            ui.add(Slider::new(&mut world.particle_count_per_dim, 1..=100));
-
-            ui.separator();
-
-            if ui.button("Restart").clicked() {
-                world.particles = particles(world.particle_count_per_dim);
-            }
-        });
-    });
-}
-
 #[macroquad::main("Fluidisk")]
 async fn main() {
     let mut world = World::new();
 
     loop {
-        clear_background(BLACK);
-
-        input(&mut world);
-
+        world.input();
         let dt = get_frame_time();
         world.step(dt);
-        world.draw();
 
+        clear_background(BLACK);
+        world.draw();
         egui_macroquad::draw();
 
         next_frame().await
