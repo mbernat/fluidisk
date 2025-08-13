@@ -2,7 +2,7 @@
 
 Fluidisk is a simple fluid simulation based on the paper [position based fluids](https://blog.mmacklin.com/project/pbf/).
 
-TODO image
+https://github.com/user-attachments/assets/44b16558-040f-42fa-bae7-08482cf03ef0
 
 ## Running the project
 
