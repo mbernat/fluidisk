@@ -7,7 +7,10 @@ use macroquad::{
     time::get_frame_time,
     window::{clear_background, next_frame},
 };
-use std::f32::consts::PI;
+
+use crate::kernel::d2::{poly6, spiky_diff};
+
+mod kernel;
 
 const WIDTH: f32 = 800.0;
 const HEIGHT: f32 = 600.0;
@@ -263,15 +266,13 @@ impl World {
         }
     }
 
-    // TODO: 2d kernels or normalization; poly6 and spiky are normalized for 3d, so we multiply by `h` to somewhat correct for that
-
     fn kernel(x: Vec2, h: f32) -> f32 {
-        h * poly6(x.length_squared(), h)
+        poly6(x.length_squared(), h)
     }
 
     fn kernel_grad(x: Vec2, h: f32) -> Vec2 {
         let (norm, r) = x.normalize_and_length();
-        h * spiky_diff(r, h) * norm
+        spiky_diff(r, h) * norm
     }
 
     fn input(&mut self) {
@@ -310,30 +311,6 @@ impl World {
                 draw_circle_lines(p.pos.x, p.pos.y, self.h, 1.0, WHITE.with_alpha(0.1));
             }
         }
-    }
-}
-
-fn poly6(r_squared: f32, h: f32) -> f32 {
-    if r_squared <= h * h {
-        315.0 / (64.0 * PI * h.powi(9)) * (h * h - r_squared).powi(3)
-    } else {
-        0.0
-    }
-}
-
-fn _spiky(r: f32, h: f32) -> f32 {
-    if r <= h {
-        15.0 / (PI * h.powi(6)) * (h - r).powi(3)
-    } else {
-        0.0
-    }
-}
-
-fn spiky_diff(r: f32, h: f32) -> f32 {
-    if r <= h {
-        -45.0 / (PI * h.powi(6)) * (h - r).powi(2)
-    } else {
-        0.0
     }
 }
 
