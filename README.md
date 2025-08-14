@@ -14,7 +14,6 @@ cargo run --release
 
 ## TODOs
 
-- [ ] Normalize the SPH kernels for 2d or find better ones specifically for 2d.
 - [ ] Derive related simulation parameters like number of particles, target density and kernel cutoff distance
       from each other or perhaps from a simpler set of more intuitive parameters.
 - [ ] Show some info about the constraint solving convergence.
@@ -23,6 +22,7 @@ cargo run --release
 - [ ] Add vorticity confiment and XSPH viscosity.
 - [ ] Add SPH as an optional backend.
 - [ ] Support calculations on a GPU.
+- [x] Normalize the SPH kernels for 2d or find better ones specifically for 2d.
 
 ## Theory
 
