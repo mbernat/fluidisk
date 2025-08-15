@@ -141,8 +141,8 @@ impl World {
 
         let _max_neighbor_count = neighbors.iter().map(|n| n.len()).max().unwrap();
 
-        for _iter in 0..self.solver_iterations {
-            let lambda: Vec<_> = neighbors
+        for iter in 0..self.solver_iterations {
+            let ci_and_lambda: Vec<_> = neighbors
                 .iter()
                 .enumerate()
                 .map(|(i, neighbors)| {
@@ -162,9 +162,34 @@ impl World {
                     let sum_of_square_of_grads: f32 =
                         grads.iter().map(|g| g.length_squared()).sum();
                     let sum_grad_ci = square_of_sum_of_grads + sum_of_square_of_grads;
-                    -ci / (sum_grad_ci + self.cfm)
+                    (ci, -ci / (sum_grad_ci + self.cfm))
                 })
                 .collect();
+
+            // TODO: move elsewhere and add more statistics
+            // TODO: egui histogram
+            {
+                println!("Iteration {iter:2}");
+
+                let size = 0.1;
+                let mut histogram = Partition::new(2.0, size, size);
+                for (i, (ci, _)) in ci_and_lambda.iter().enumerate() {
+                    histogram.add((i, (vec2(ci + 1.0, 0.0))));
+                }
+
+                for (i, column) in histogram.grid.iter().enumerate() {
+                    let count = column[0].len();
+                    let ci_low = (i as f32) * size - 1.0;
+                    let ci_high = ci_low + size;
+                    println!("ci {ci_low:.2} .. {ci_high:.2}: {count:4}");
+                }
+
+                let max_abs_ci = ci_and_lambda
+                    .iter()
+                    .max_by(|a, b| a.0.abs().partial_cmp(&b.0.abs()).unwrap())
+                    .unwrap();
+                println!("Max constraint error: {:.3}", max_abs_ci.0);
+            }
 
             let delta_pos: Vec<_> = neighbors
                 .iter()
@@ -174,7 +199,8 @@ impl World {
                         .iter()
                         .copied()
                         .map(|j| {
-                            (lambda[i] + lambda[j]) * Self::kernel_grad(pos[i] - pos[j], self.h)
+                            (ci_and_lambda[i].1 + ci_and_lambda[j].1)
+                                * Self::kernel_grad(pos[i] - pos[j], self.h)
                         })
                         .sum();
 

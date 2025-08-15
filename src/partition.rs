@@ -3,7 +3,9 @@ use glam::Vec2;
 /// 2d grid of particle indices and positions contained within the given square cell.
 /// Particles that are out of bounds get put into the closest cell.
 pub struct Partition {
-    grid: Vec<Vec<Vec<(usize, Vec2)>>>,
+    // TODO add accessors and remove pub
+    // Vec of columns so that it can be more naturally indexed as grid[x][y]
+    pub grid: Vec<Vec<Vec<(usize, Vec2)>>>,
 
     size: f32,
     x_dim: usize,
@@ -31,10 +33,10 @@ impl Partition {
 
     fn find_cell(&self, pos: Vec2) -> (usize, usize) {
         let cell_x = (pos.x / self.size)
-            .round()
+            .floor()
             .clamp(0.0, self.x_dim as f32 - 1.0) as usize;
         let cell_y = (pos.y / self.size)
-            .round()
+            .floor()
             .clamp(0.0, self.y_dim as f32 - 1.0) as usize;
 
         (cell_x, cell_y)
